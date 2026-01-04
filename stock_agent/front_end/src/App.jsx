@@ -1,23 +1,49 @@
 import React from 'react';
-import TerminalDemo from './components/TerminalDemo';
-import WorkflowVisualizer from './components/WorkflowVisualizer';
-import AnalysisResult from './components/AnalysisResult';
-import { Bot, Github, ArrowRight } from 'lucide-react';
+  // State for search query and processing
+  const [query, setQuery] = React.useState("High growth tech stocks");
+  const [logs, setLogs] = React.useState([]);
+  const [results, setResults] = React.useState([]);
+  const [isLoading, setIsLoading] = React.useState(false);
 
-function App() {
-  const dummyLogs = [
-    { text: "Starting Agentic Sentinel...", color: "text-blue-400" },
-    { text: "Loading configuration from .env...", color: "text-slate-400" },
-    { text: "Target Ticker: NVDA", color: "text-green-400" },
-    { text: "[Node: Ingest] Fetching market data...", color: "text-slate-300" },
-    { text: "SUCCESS: Market close price retrieved.", color: "text-green-500" },
-    { text: "Calculating variance... Delta: -4.2%", color: "text-yellow-400" },
-    { text: "TRIGGER: Significant move detected (>200bps).", color: "text-red-400" },
-    { text: "[Node: RetrieveNews] Querying Tavily AI...", color: "text-slate-300" },
-    { text: "Found 3 relevant articles (12h window).", color: "text-blue-300" },
-    { text: "[Node: Analyze] Sending context to Gemini 1.5 Pro...", color: "text-purple-400" },
-    { text: "Analysis complete. Formatting output.", color: "text-green-500" },
-  ];
+  const addLog = (text, color = "text-slate-300") => {
+    setLogs(prev => [...prev, { text, color }]);
+  };
+
+  const handleRunSimulation = async () => {
+    setIsLoading(true);
+    setLogs([]);
+    setResults([]);
+    
+    addLog(`Starting Agentic Sentinel...`, "text-blue-400");
+    addLog(`User Query: "${query}"`, "text-slate-400");
+    addLog(`Translated to Screener.in syntax...`, "text-slate-500");
+    addLog(`Scraping target companies...`, "text-yellow-400");
+    
+    try {
+      const response = await fetch("http://localhost:8000/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      
+      const data = await response.json();
+      
+      if (!data || data.length === 0) {
+        addLog("No companies found matching criteria.", "text-red-500");
+      } else {
+        addLog(`Found ${data.length} companies. Starting deep analysis...`, "text-green-400");
+        setResults(data);
+        data.forEach(item => {
+           addLog(`[${item.ticker}] Decision: ${item.decision}`, item.decision === "Justified" ? "text-green-500" : "text-yellow-500");
+        });
+      }
+    } catch (error) {
+      addLog(`Error connecting to server: ${error.message}`, "text-red-500");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
 
   return (
     <div className="min-h-screen selection:bg-blue-500/30">
@@ -64,9 +90,23 @@ function App() {
             root-cause analysis using Generative AI. Beyond just numbers—understanding the <span className="text-white font-medium italic">why</span>.
           </p>
 
-          <div className="flex justify-center gap-6 pt-6">
-            <button className="px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-all shadow-[0_0_40px_-10px_rgba(37,99,235,0.5)] hover:shadow-[0_0_60px_-15px_rgba(37,99,235,0.6)] hover:-translate-y-1 flex items-center gap-2 border border-blue-400/20">
-              Run Simulation <ArrowRight size={20} />
+          <div className="max-w-xl mx-auto mb-8">
+            <input 
+              type="text" 
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full px-6 py-4 rounded-xl glass text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-lg"
+              placeholder="E.g., Undervalued banks with high ROE"
+            />
+          </div>
+
+          <div className="flex justify-center gap-6 pt-2">
+            <button 
+              onClick={handleRunSimulation}
+              disabled={isLoading}
+              className={`px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-all shadow-[0_0_40px_-10px_rgba(37,99,235,0.5)] hover:shadow-[0_0_60px_-15px_rgba(37,99,235,0.6)] hover:-translate-y-1 flex items-center gap-2 border border-blue-400/20 disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              {isLoading ? "Running Analysis..." : "Run Analysis"} <ArrowRight size={20} />
             </button>
             <button className="px-8 py-4 glass text-white rounded-xl font-bold transition-all hover:bg-white/10 hover:-translate-y-1 border border-white/10">
               View on GitHub
@@ -105,7 +145,7 @@ function App() {
                </p>
             </div>
             <div className="transform transition-all duration-500 group-hover:scale-[1.02] group-hover:-translate-y-2">
-              <TerminalDemo logs={dummyLogs} />
+              <TerminalDemo logs={logs} />
             </div>
           </div>
 
@@ -120,13 +160,24 @@ function App() {
                  actionable intelligence.
                </p>
             </div>
-            <div className="transform transition-all duration-500 group-hover:scale-[1.02] group-hover:-translate-y-2">
-              <AnalysisResult 
-                ticker="NVDA" 
-                decision="JUSTIFIED" 
-                confidence={87}
-                summary="The 4.2% drop follows new export restrictions announced by the Department of Commerce, impacting high-end AI chip sales to specific regions. Heavy volume confirms institutional selling pressure."
-              />
+            
+            <div className="space-y-4">
+              {results.length === 0 && !isLoading && (
+                 <div className="glass p-6 rounded-xl text-center text-slate-500 italic">
+                   Run a search to see AI analysis results here.
+                 </div>
+              )}
+              
+              {results.map((res, idx) => (
+                <div key={idx} className="transform transition-all duration-500 hover:scale-[1.02]">
+                  <AnalysisResult 
+                    ticker={res.ticker}
+                    decision={res.decision}
+                    confidence={res.confidence}
+                    summary={res.analysis}
+                  />
+                </div>
+              ))}
             </div>
           </div>
         </div>
